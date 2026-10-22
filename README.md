@@ -7,6 +7,9 @@
  . .venv/bin/activate
  ```
  ```bash
+ pip install django-ninja
+ ```
+ ```bash
  ./manage.py runserver
  ```
 
