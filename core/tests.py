@@ -31,7 +31,7 @@ class ContextVarTestCase(TestCase):
 
 
 class MyBaseModelAuditTestCase(TestCase):
-    """Test de la traçabilité automatique (creePar, modifiePar, dates) de MyBaseModel."""
+    """Test de la traçabilité automatique (cree_par, modifie_par, dates) de MyBaseModel."""
 
     @classmethod
     def setUpClass(cls):
@@ -41,10 +41,10 @@ class MyBaseModelAuditTestCase(TestCase):
                 CREATE TABLE IF NOT EXISTS core_dummyauditmodel (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name VARCHAR(50) NOT NULL,
-                    dateCreation DATETIME NOT NULL,
-                    dateModification DATETIME NOT NULL,
-                    creePar_id INTEGER NULL REFERENCES auth_user(id),
-                    modifiePar_id INTEGER NULL REFERENCES auth_user(id)
+                    date_creation DATETIME NOT NULL,
+                    date_modification DATETIME NOT NULL,
+                    cree_par_id INTEGER NULL REFERENCES auth_user(id),
+                    modifie_par_id INTEGER NULL REFERENCES auth_user(id)
                 );
             """)
 
@@ -65,28 +65,28 @@ class MyBaseModelAuditTestCase(TestCase):
         super().tearDown()
 
     def test_creation_without_user(self):
-        """Sans utilisateur dans le contexte, les champs de dates existent mais creePar/modifiePar sont None."""
+        """Sans utilisateur dans le contexte, les champs de dates existent mais cree_par/modifie_par sont None."""
         item = DummyAuditModel.objects.create(name="Item 1")
-        self.assertIsNone(item.creePar)
-        self.assertIsNone(item.modifiePar)
-        self.assertIsNotNone(item.dateCreation)
-        self.assertIsNotNone(item.dateModification)
+        self.assertIsNone(item.cree_par)
+        self.assertIsNone(item.modifie_par)
+        self.assertIsNotNone(item.date_creation)
+        self.assertIsNotNone(item.date_modification)
 
     def test_creation_with_user_in_context(self):
-        """Avec un utilisateur dans le contexte, creePar et modifiePar sont automatiquement renseignés."""
+        """Avec un utilisateur dans le contexte, cree_par et modifie_par sont automatiquement renseignés."""
         set_current_user(self.user1)
         item = DummyAuditModel.objects.create(name="Item 2")
 
-        self.assertEqual(item.creePar, self.user1)
-        self.assertEqual(item.modifiePar, self.user1)
+        self.assertEqual(item.cree_par, self.user1)
+        self.assertEqual(item.modifie_par, self.user1)
 
     def test_modification_updates_modifie_par_only(self):
-        """Lors d'une mise à jour par un second utilisateur, creePar reste inchangé et modifiePar est mis à jour."""
+        """Lors d'une mise à jour par un second utilisateur, cree_par reste inchangé et modifie_par est mis à jour."""
         # Création par Alice
         set_current_user(self.user1)
         item = DummyAuditModel.objects.create(name="Initial Name")
-        self.assertEqual(item.creePar, self.user1)
-        self.assertEqual(item.modifiePar, self.user1)
+        self.assertEqual(item.cree_par, self.user1)
+        self.assertEqual(item.modifie_par, self.user1)
 
         # Modification par Bob
         set_current_user(self.user2)
@@ -94,11 +94,11 @@ class MyBaseModelAuditTestCase(TestCase):
         item.save()
         item.refresh_from_db()
 
-        self.assertEqual(item.creePar, self.user1)
-        self.assertEqual(item.modifiePar, self.user2)
+        self.assertEqual(item.cree_par, self.user1)
+        self.assertEqual(item.modifie_par, self.user2)
 
     def test_save_with_update_fields_preserves_audit(self):
-        """Quand update_fields est spécifié, modifiePar et dateModification sont tout de même mis à jour."""
+        """Quand update_fields est spécifié, modifie_par et date_modification sont tout de même mis à jour."""
         set_current_user(self.user1)
         item = DummyAuditModel.objects.create(name="Initial")
 
@@ -107,7 +107,7 @@ class MyBaseModelAuditTestCase(TestCase):
         item.save(update_fields=["name"])
         item.refresh_from_db()
 
-        self.assertEqual(item.modifiePar, self.user2)
+        self.assertEqual(item.modifie_par, self.user2)
 
 
 class CurrentUserMiddlewareTestCase(TestCase):

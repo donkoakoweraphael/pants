@@ -20,10 +20,10 @@ class SuccessResponse(Schema):
 
 
 class AuditOut(Schema):
-    """Schéma réutilisable représentant les champs d'audit de MyBaseModel."""
+    """Schéma réutilisable représentant les champs d'audit de MyBaseModel en snake_case."""
 
     id: int
-    dateCreation: datetime
-    dateModification: datetime
-    creePar_id: Optional[int] = None
-    modifiePar_id: Optional[int] = None
+    date_creation: datetime
+    date_modification: datetime
+    cree_par_id: Optional[int] = None
+    modifie_par_id: Optional[int] = None
