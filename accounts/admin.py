@@ -4,17 +4,45 @@ from accounts.models import Utilisateur, Role, Permission
 
 @admin.register(Permission)
 class PermissionAdmin(admin.ModelAdmin):
-    list_display = ("code", "libelle", "date_creation", "date_modification")
+    list_display = (
+        "code",
+        "libelle",
+        "cree_par",
+        "date_creation",
+        "date_modification",
+    )
     search_fields = ("code", "libelle")
     ordering = ("code",)
+    readonly_fields = ("cree_par", "modifie_par", "date_creation", "date_modification")
+    fieldsets = (
+        ("Informations générales", {"fields": ("code", "libelle")}),
+        (
+            "Traçabilité (Audit)",
+            {"fields": ("cree_par", "modifie_par", "date_creation", "date_modification")},
+        ),
+    )
 
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ("libelle", "get_permissions_count", "date_creation", "date_modification")
+    list_display = (
+        "libelle",
+        "get_permissions_count",
+        "cree_par",
+        "date_creation",
+        "date_modification",
+    )
     search_fields = ("libelle",)
     filter_horizontal = ("permissions",)
     ordering = ("libelle",)
+    readonly_fields = ("cree_par", "modifie_par", "date_creation", "date_modification")
+    fieldsets = (
+        ("Informations générales", {"fields": ("libelle", "permissions")}),
+        (
+            "Traçabilité (Audit)",
+            {"fields": ("cree_par", "modifie_par", "date_creation", "date_modification")},
+        ),
+    )
 
     @admin.display(description="Nombre de permissions")
     def get_permissions_count(self, obj):
@@ -31,12 +59,21 @@ class UtilisateurAdmin(admin.ModelAdmin):
         "role",
         "is_staff",
         "is_active",
+        "cree_par",
         "date_creation",
     )
     list_filter = ("statut", "role", "is_staff", "is_active")
     search_fields = ("courriel", "nom", "prenom", "tel")
     filter_horizontal = ("permissions", "groups", "user_permissions")
     ordering = ("nom", "prenom")
+    readonly_fields = (
+        "last_login",
+        "date_joined",
+        "cree_par",
+        "modifie_par",
+        "date_creation",
+        "date_modification",
+    )
     fieldsets = (
         (
             "Identifiants & Informations personnelles",
@@ -59,8 +96,16 @@ class UtilisateurAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Audit & Connexions",
-            {"fields": ("last_login", "date_joined")},
+            "Traçabilité & Connexions (Audit)",
+            {
+                "fields": (
+                    "cree_par",
+                    "modifie_par",
+                    "date_creation",
+                    "date_modification",
+                    "last_login",
+                    "date_joined",
+                )
+            },
         ),
     )
-    readonly_fields = ("last_login", "date_joined")
