@@ -14,6 +14,7 @@ class PermissionAdmin(admin.ModelAdmin):
         "date_creation",
         "date_modification",
     )
+    list_display_links = ("id", "code", "libelle")
     search_fields = ("code", "libelle")
     ordering = ("id",)
     readonly_fields = (
@@ -72,6 +73,7 @@ class RoleAdmin(admin.ModelAdmin):
         "date_creation",
         "date_modification",
     )
+    list_display_links = ("id", "libelle")
     search_fields = ("libelle",)
     filter_horizontal = ("permissions",)
     ordering = ("id",)
@@ -143,6 +145,7 @@ class UtilisateurAdmin(admin.ModelAdmin):
         "date_creation",
         "date_modification",
     )
+    list_display_links = ("id", "courriel")
     list_filter = ("statut", "role", "is_staff", "is_active")
     search_fields = ("courriel", "nom", "prenom", "tel")
     filter_horizontal = ("permissions", "groups", "user_permissions")
