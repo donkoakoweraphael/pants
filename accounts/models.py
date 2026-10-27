@@ -1,18 +1,32 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.utils import timezone
 from core.models import MyBaseModel
 
 
 class UtilisateurManager(BaseUserManager):
     """Gestionnaire personnalisé pour créer des utilisateurs avec leur courriel comme identifiant."""
 
+    def get_by_natural_key(self, username):
+        """Permet l'authentification insensible à la casse."""
+        if username:
+            username = username.lower().strip()
+        return self.get(**{self.model.USERNAME_FIELD: username})
+
     def create_user(self, courriel=None, password=None, **extra_fields):
         if not courriel:
             courriel = extra_fields.pop("username", None) or extra_fields.pop("email", None)
         if not courriel:
             raise ValueError("Le champ courriel est obligatoire.")
-        courriel = self.normalize_email(courriel)
+        courriel = self.normalize_email(courriel).lower().strip()
         extra_fields.setdefault("statut", StatutUtilisateur.ACTIF)
+
+        # Synchronise is_active avec le statut métier
+        is_active = extra_fields.get("statut") == StatutUtilisateur.ACTIF
+        extra_fields.setdefault("is_active", is_active)
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+
         user = self.model(courriel=courriel, **extra_fields)
         if password:
             user.set_password(password)
@@ -25,6 +39,8 @@ class UtilisateurManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("statut", StatutUtilisateur.ACTIF)
+        extra_fields.setdefault("nom", "Admin")
+        extra_fields.setdefault("prenom", "Super")
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("Le superutilisateur doit avoir is_staff=True.")
@@ -59,6 +75,11 @@ class Permission(MyBaseModel):
     def __str__(self):
         return f"{self.libelle} ({self.code})"
 
+    def save(self, *args, **kwargs):
+        if self.code:
+            self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
 
 class Role(MyBaseModel):
     """
@@ -83,16 +104,13 @@ class Role(MyBaseModel):
         return self.libelle
 
 
-class Utilisateur(AbstractUser, MyBaseModel):
+class Utilisateur(AbstractBaseUser, PermissionsMixin, MyBaseModel):
     """
     Modèle Utilisateur personnalisé conforme au diagramme UML.
-    Identifié uniquement par son courriel. Possède un rôle et des permissions directes.
+    Hérite de AbstractBaseUser pour la gestion sécurisée de l'authentification et du mot de passe,
+    de PermissionsMixin pour la compatibilité avec Django Admin et is_superuser,
+    et de MyBaseModel pour l'audit automatique.
     """
-
-    # Retrait des champs username, first_name et last_name au profit du diagramme UML
-    username = None
-    first_name = None
-    last_name = None
 
     # Champs définis dans le diagramme
     nom = models.CharField(max_length=150, verbose_name="Nom de famille")
@@ -104,6 +122,22 @@ class Utilisateur(AbstractUser, MyBaseModel):
         choices=StatutUtilisateur.choices,
         default=StatutUtilisateur.ACTIF,
         verbose_name="Statut du compte",
+    )
+
+    # Champs techniques nécessaires à l'authentification et à l'administration Django
+    is_staff = models.BooleanField(
+        default=False,
+        verbose_name="Accès administration",
+        help_text="Indique si l'utilisateur peut se connecter au site d'administration.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Actif",
+        help_text="Indique si le compte est actif. Synchronisé automatiquement avec le statut métier.",
+    )
+    date_joined = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Date d'inscription",
     )
 
     # Relations du diagramme
@@ -122,7 +156,7 @@ class Utilisateur(AbstractUser, MyBaseModel):
         verbose_name="Permissions directes",
     )
 
-    # Résolution des collisions de groupes/permissions de Django natif
+    # Résolution des collisions de groupes/permissions de Django natif (PermissionsMixin)
     groups = models.ManyToManyField(
         "auth.Group",
         related_name="utilisateurs_groupes",
@@ -157,25 +191,33 @@ class Utilisateur(AbstractUser, MyBaseModel):
         """Retourne le prénom ou le courriel de l'utilisateur."""
         return self.prenom or self.courriel
 
-    @property
-    def email(self):
-        """Alias vers courriel pour compatibilité avec l'écosystème Django."""
-        return self.courriel
-
-    @email.setter
-    def email(self, value):
-        self.courriel = value
+    def clean(self):
+        super().clean()
+        if self.courriel:
+            self.courriel = self.courriel.lower().strip()
 
     def save(self, *args, **kwargs):
+        if self.courriel:
+            self.courriel = self.courriel.lower().strip()
         # Synchronise automatiquement le booléen Django is_active avec le statut métier
         self.is_active = self.statut == StatutUtilisateur.ACTIF
+
+        # Sécurise la mise à jour partielle avec update_fields
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"is_active", "courriel"}
+
         super().save(*args, **kwargs)
 
     def get_all_permissions_codes(self) -> set[str]:
         """
-        Calcule les permissions effectives : fusionne les permissions
-        héritées du rôle et les permissions directes de l'utilisateur.
+        Calcule les permissions effectives :
+        - Un superutilisateur actif bénéficie de toutes les permissions du système.
+        - Sinon, fusionne les permissions héritées du rôle et les permissions directes.
         """
+        if self.is_superuser and self.is_active:
+            return set(Permission.objects.values_list("code", flat=True))
+
         codes = set()
         if self.role_id:
             codes.update(self.role.permissions.values_list("code", flat=True))

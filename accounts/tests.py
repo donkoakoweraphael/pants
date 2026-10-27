@@ -11,7 +11,7 @@ class AccountsModelsTestCase(TestCase):
         reset_current_user()
         # Création de permissions de test
         self.perm_user_view = Permission.objects.create(
-            code="UTILISATEUR_VOIR", libelle="Consulter les utilisateurs"
+            code="utilisateur_voir", libelle="Consulter les utilisateurs"
         )
         self.perm_user_create = Permission.objects.create(
             code="UTILISATEUR_CREER", libelle="Créer un utilisateur"
@@ -28,8 +28,10 @@ class AccountsModelsTestCase(TestCase):
         reset_current_user()
         super().tearDown()
 
-    def test_permission_creation(self):
-        """Vérifie la création d'une permission et son format d'affichage."""
+    def test_permission_creation_and_uppercase_normalization(self):
+        """Vérifie la création d'une permission et la normalisation en majuscules du code technique."""
+        # 'utilisateur_voir' doit avoir été normalisé en 'UTILISATEUR_VOIR'
+        self.assertEqual(self.perm_user_view.code, "UTILISATEUR_VOIR")
         self.assertEqual(str(self.perm_user_view), "Consulter les utilisateurs (UTILISATEUR_VOIR)")
         self.assertIsNotNone(self.perm_user_view.date_creation)
         self.assertIsNotNone(self.perm_user_view.date_modification)
@@ -57,6 +59,8 @@ class AccountsModelsTestCase(TestCase):
         self.assertEqual(user.prenom, "Jean")
         self.assertEqual(user.tel, "+22890000000")
         self.assertTrue(user.is_active)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
 
         # Test d'authentification par courriel
         authenticated_user = authenticate(
@@ -64,6 +68,23 @@ class AccountsModelsTestCase(TestCase):
         )
         self.assertIsNotNone(authenticated_user)
         self.assertEqual(authenticated_user, user)
+
+    def test_utilisateur_courriel_case_insensitivity(self):
+        """Vérifie la normalisation en minuscules du courriel à la création et à l'authentification."""
+        user = Utilisateur.objects.create_user(
+            courriel="Jean.Dupont@Example.COM",
+            password="motdepassefort123",
+            nom="Dupont",
+            prenom="Jean",
+        )
+        self.assertEqual(user.courriel, "jean.dupont@example.com")
+
+        # Authentification avec casse différente
+        auth_user = authenticate(
+            username="JEAN.DUPONT@example.com", password="motdepassefort123"
+        )
+        self.assertIsNotNone(auth_user)
+        self.assertEqual(auth_user, user)
 
     def test_utilisateur_status_synchronization(self):
         """Vérifie que le statut SUSPENDU ou DESACTIVE désactive automatiquement is_active."""
@@ -80,6 +101,24 @@ class AccountsModelsTestCase(TestCase):
         user_suspendu.statut = StatutUtilisateur.ACTIF
         user_suspendu.save()
         self.assertTrue(user_suspendu.is_active)
+
+    def test_utilisateur_update_fields_preserves_is_active(self):
+        """Vérifie qu'un save(update_fields=['statut']) synchronise bien is_active en base de données."""
+        user = Utilisateur.objects.create_user(
+            courriel="uf.test@example.com",
+            password="pwd",
+            nom="Test",
+            prenom="UpdateFields",
+            statut=StatutUtilisateur.ACTIF,
+        )
+        self.assertTrue(user.is_active)
+
+        user.statut = StatutUtilisateur.SUSPENDU
+        user.save(update_fields=["statut"])
+        user.refresh_from_db()
+
+        self.assertEqual(user.statut, StatutUtilisateur.SUSPENDU)
+        self.assertFalse(user.is_active)
 
     def test_get_all_permissions_codes_combination(self):
         """
@@ -105,6 +144,23 @@ class AccountsModelsTestCase(TestCase):
             {"UTILISATEUR_VOIR", "UTILISATEUR_CREER", "UTILISATEUR_SUSPENDRE"},
         )
 
+    def test_superuser_has_all_permissions(self):
+        """Un superutilisateur actif doit posséder toutes les permissions existantes dans le système."""
+        superuser = Utilisateur.objects.create_superuser(
+            courriel="root@example.com",
+            password="pwd",
+            nom="Root",
+            prenom="Super",
+        )
+        self.assertTrue(superuser.is_superuser)
+        self.assertTrue(superuser.is_staff)
+        self.assertTrue(superuser.is_active)
+
+        # Toutes les permissions en base doivent être renvoyées
+        droits_superuser = superuser.get_all_permissions_codes()
+        toutes_permissions = set(Permission.objects.values_list("code", flat=True))
+        self.assertSetEqual(droits_superuser, toutes_permissions)
+
     def test_audit_trail_on_accounts_models(self):
         """Vérifie que MyBaseModel remplit bien cree_par et modifie_par sur les modèles d'accounts."""
         admin_user = Utilisateur.objects.create_user(
@@ -121,8 +177,8 @@ class AccountsModelsTestCase(TestCase):
         self.assertEqual(nouveau_role.cree_par, admin_user)
         self.assertEqual(nouveau_role.modifie_par, admin_user)
 
-    def test_utilisateur_names_and_email_alias(self):
-        """Vérifie get_full_name, get_short_name et l'alias email (getter/setter)."""
+    def test_utilisateur_names(self):
+        """Vérifie get_full_name et get_short_name."""
         user = Utilisateur(
             courriel="alice.wonderland@example.com",
             nom="Wonderland",
@@ -130,8 +186,3 @@ class AccountsModelsTestCase(TestCase):
         )
         self.assertEqual(user.get_full_name(), "Alice Wonderland")
         self.assertEqual(user.get_short_name(), "Alice")
-        self.assertEqual(user.email, "alice.wonderland@example.com")
-
-        # Test setter de l'alias email
-        user.email = "alice.new@example.com"
-        self.assertEqual(user.courriel, "alice.new@example.com")
