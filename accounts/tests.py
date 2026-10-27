@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import authenticate
 from core.context import set_current_user, reset_current_user
 from accounts.models import StatutUtilisateur, Permission, Role, Utilisateur
+from accounts.constants import CodePermission
 
 
 class AccountsModelsTestCase(TestCase):
@@ -9,32 +10,35 @@ class AccountsModelsTestCase(TestCase):
 
     def setUp(self):
         reset_current_user()
-        # Création de permissions de test
-        self.perm_user_view = Permission.objects.create(
-            code="utilisateur_voir", libelle="Consulter les utilisateurs"
-        )
-        self.perm_user_create = Permission.objects.create(
-            code="UTILISATEUR_CREER", libelle="Créer un utilisateur"
-        )
-        self.perm_user_suspend = Permission.objects.create(
-            code="UTILISATEUR_SUSPENDRE", libelle="Suspendre un utilisateur"
-        )
+        # Récupération des permissions pré-alimentées par le signal post_migrate
+        self.perm_user_view = Permission.objects.get(code=CodePermission.UTILISATEUR_VOIR)
+        self.perm_user_create = Permission.objects.get(code=CodePermission.UTILISATEUR_CREER)
+        self.perm_user_supprimer = Permission.objects.get(code=CodePermission.UTILISATEUR_SUPPRIMER)
 
         # Création d'un rôle de test
-        self.role_admin = Role.objects.create(libelle="Administrateur")
+        self.role_admin, _ = Role.objects.get_or_create(libelle="Administrateur")
         self.role_admin.permissions.add(self.perm_user_view, self.perm_user_create)
 
     def tearDown(self):
         reset_current_user()
         super().tearDown()
 
+    def test_post_migrate_synchronise_toutes_les_permissions(self):
+        """Vérifie que le signal post_migrate a bien peuplé toutes les permissions de CodePermission."""
+        for code, libelle in CodePermission.choices:
+            perm = Permission.objects.filter(code=code).first()
+            self.assertIsNotNone(perm, f"La permission {code} n'a pas été synchronisée.")
+            self.assertEqual(perm.libelle, libelle)
+
     def test_permission_creation_and_uppercase_normalization(self):
-        """Vérifie la création d'une permission et la normalisation en majuscules du code technique."""
-        # 'utilisateur_voir' doit avoir été normalisé en 'UTILISATEUR_VOIR'
-        self.assertEqual(self.perm_user_view.code, "UTILISATEUR_VOIR")
-        self.assertEqual(str(self.perm_user_view), "Consulter les utilisateurs (UTILISATEUR_VOIR)")
-        self.assertIsNotNone(self.perm_user_view.date_creation)
-        self.assertIsNotNone(self.perm_user_view.date_modification)
+        """Vérifie la création manuelle d'une permission et sa normalisation en majuscules."""
+        perm = Permission.objects.create(
+            code="test_nouvelle_permission", libelle="Permission de test"
+        )
+        self.assertEqual(perm.code, "TEST_NOUVELLE_PERMISSION")
+        self.assertEqual(str(perm), "Permission de test (TEST_NOUVELLE_PERMISSION)")
+        self.assertIsNotNone(perm.date_creation)
+        self.assertIsNotNone(perm.date_modification)
 
     def test_role_creation_and_m2m_permissions(self):
         """Vérifie l'attribution des permissions à un rôle."""
@@ -135,13 +139,13 @@ class AccountsModelsTestCase(TestCase):
         )
 
         # Attribution d'une permission directe exceptionnelle
-        user.permissions.add(self.perm_user_suspend)
+        user.permissions.add(self.perm_user_supprimer)
 
         droits_effectifs = user.get_all_permissions_codes()
 
         self.assertSetEqual(
             droits_effectifs,
-            {"UTILISATEUR_VOIR", "UTILISATEUR_CREER", "UTILISATEUR_SUSPENDRE"},
+            {"UTILISATEUR_VOIR", "UTILISATEUR_CREER", "UTILISATEUR_SUPPRIMER"},
         )
 
     def test_superuser_has_all_permissions(self):
