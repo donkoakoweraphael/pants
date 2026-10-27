@@ -42,12 +42,14 @@ class MyBaseModel(models.Model):
         """
         Intercepte la sauvegarde pour renseigner automatiquement cree_par et modifie_par
         à partir de l'utilisateur stocké dans le contexte de requête.
+        Gère également de façon sécurisée le cas d'une sauvegarde restreinte (update_fields).
         """
         user = get_current_user()
+        is_new = not self.pk
 
         if user and getattr(user, "is_authenticated", False):
             # Si c'est une création (pas de clé primaire et cree_par pas encore valorisé)
-            if not self.pk and not self.cree_par_id:
+            if is_new and not self.cree_par_id:
                 self.cree_par = user
             # À chaque modification ou création
             self.modifie_par = user
@@ -55,6 +57,9 @@ class MyBaseModel(models.Model):
         # Si l'appelant a restreint les colonnes à sauvegarder via update_fields
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs["update_fields"] = set(update_fields) | {"modifie_par", "date_modification"}
+            extra_fields = {"modifie_par", "date_modification"}
+            if is_new:
+                extra_fields.update({"cree_par", "date_creation"})
+            kwargs["update_fields"] = set(update_fields) | extra_fields
 
         super().save(*args, **kwargs)

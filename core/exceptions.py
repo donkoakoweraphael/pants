@@ -1,4 +1,5 @@
 from ninja.errors import HttpError
+from ninja import NinjaAPI
 
 
 class BaseAPIException(HttpError):
@@ -33,3 +34,22 @@ class UnauthorizedException(BaseAPIException):
 class ConflictException(BaseAPIException):
     status_code = 409
     code = "CONFLICT"
+
+
+def register_exception_handlers(api: NinjaAPI) -> None:
+    """
+    Enregistre les gestionnaires d'exceptions personnalisés sur l'instance NinjaAPI
+    pour renvoyer des réponses JSON conformes au schéma ErrorResponse.
+    """
+
+    @api.exception_handler(BaseAPIException)
+    def on_base_api_exception(request, exc: BaseAPIException):
+        return api.create_response(
+            request,
+            {
+                "message": exc.message,
+                "code": exc.code,
+                "details": exc.details,
+            },
+            status=exc.status_code,
+        )
