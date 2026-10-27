@@ -208,3 +208,257 @@ class AccountsModelsTestCase(TestCase):
             prenom="Root",
         )
         self.assertFalse(admin_user.doit_changer_mot_de_passe)
+
+
+class AccountsAPITestCase(TestCase):
+    """
+    Tests d'intégration complets de l'API REST :
+    - Authentification et quarantaine du mot de passe temporaire
+    - Décorateur de permissions RBAC
+    - Opérations CRUD rôles et utilisateurs
+    - Soft delete et réactivation
+    - Lecture seule des permissions
+    """
+
+    def setUp(self):
+        reset_current_user()
+        from django.test import Client
+        from accounts.security import creer_access_token
+
+        self.client = Client()
+
+        # Rôle Administrateur contenant toutes les permissions
+        self.role_super = Role.objects.create(libelle="Super Admin Role")
+        self.role_super.permissions.set(Permission.objects.all())
+
+        # Utilisateur Admin connecté (hors quarantaine)
+        self.admin_user = Utilisateur.objects.create_user(
+            courriel="admin@pants.tg",
+            password="AdminPassword123!",
+            nom="Admin",
+            prenom="Super",
+            role=self.role_super,
+            doit_changer_mot_de_passe=False,
+        )
+
+        self.admin_token = creer_access_token(self.admin_user)
+        self.admin_headers = {"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+
+    def tearDown(self):
+        reset_current_user()
+        super().tearDown()
+
+    def test_connexion_endpoint_valide_et_invalide(self):
+        """Vérifie le fonctionnement du endpoint /api/auth/connexion."""
+        # 1. Échec avec mauvais identifiants
+        res_fail = self.client.post(
+            "/api/auth/connexion",
+            data={"courriel": "admin@pants.tg", "password": "mauvaismotdepasse"},
+            content_type="application/json",
+        )
+        self.assertEqual(res_fail.status_code, 401)
+
+        # 2. Succès avec bons identifiants
+        res_ok = self.client.post(
+            "/api/auth/connexion",
+            data={"courriel": "admin@pants.tg", "password": "AdminPassword123!"},
+            content_type="application/json",
+        )
+        self.assertEqual(res_ok.status_code, 200)
+        data = res_ok.json()
+        self.assertIn("access_token", data)
+        self.assertFalse(data["doit_changer_mot_de_passe"])
+        self.assertEqual(data["courriel"], "admin@pants.tg")
+
+    def test_quarantaine_et_changement_mot_de_passe_obligatoire(self):
+        """
+        Cycle de vie complet :
+        1. L'admin crée un utilisateur ➡️ mot de passe temporaire renvoyé.
+        2. Le nouvel utilisateur se connecte ➡️ placé en quarantaine.
+        3. Tentative d'accès à /api/roles/ ➡️ bloqué avec HTTP 403 (PASSWORD_CHANGE_REQUIRED).
+        4. Accès autorisé à /api/utilisateurs/me (whitelisted).
+        5. Changement de mot de passe réussi ➡️ quarantaine levée.
+        6. Nouvel appel à /api/roles/ ➡️ succès.
+        """
+        # 1. Création de l'utilisateur par l'admin
+        res_create = self.client.post(
+            "/api/utilisateurs/",
+            data={
+                "courriel": "nouvel.agent@pants.tg",
+                "nom": "Agent",
+                "prenom": "Nouveau",
+                "role_id": self.role_super.id,
+            },
+            content_type="application/json",
+            **self.admin_headers,
+        )
+        self.assertEqual(res_create.status_code, 201)
+        data_user = res_create.json()
+        mdp_temporaire = data_user["mot_de_passe_temporaire"]
+        self.assertTrue(data_user["doit_changer_mot_de_passe"])
+
+        # 2. L'utilisateur se connecte avec le mot de passe temporaire
+        res_login = self.client.post(
+            "/api/auth/connexion",
+            data={"courriel": "nouvel.agent@pants.tg", "password": mdp_temporaire},
+            content_type="application/json",
+        )
+        self.assertEqual(res_login.status_code, 200)
+        token_agent = res_login.json()["access_token"]
+        agent_headers = {"HTTP_AUTHORIZATION": f"Bearer {token_agent}"}
+
+        # 3. Tentative d'accès à l'API normale ➡️ Bloqué par la Barrière 1 (Quarantaine)
+        res_blocked = self.client.get("/api/roles/", **agent_headers)
+        self.assertEqual(res_blocked.status_code, 403)
+        self.assertEqual(res_blocked.json()["code"], "PASSWORD_CHANGE_REQUIRED")
+
+        # 4. Accès à /api/utilisateurs/me ➡️ Autorisé en quarantaine
+        res_me = self.client.get("/api/utilisateurs/me", **agent_headers)
+        self.assertEqual(res_me.status_code, 200)
+        self.assertTrue(res_me.json()["doit_changer_mot_de_passe"])
+
+        # 5. Changement de mot de passe obligatoire
+        res_change_fail = self.client.post(
+            "/api/utilisateurs/me/changer-mot-de-passe",
+            data={
+                "ancien_mot_de_passe": "mauvais_ancien",
+                "nouveau_mot_de_passe": "SuperNouveauMdp123!",
+                "confirmation_mot_de_passe": "SuperNouveauMdp123!",
+            },
+            content_type="application/json",
+            **agent_headers,
+        )
+        self.assertEqual(res_change_fail.status_code, 400)
+
+        res_change_ok = self.client.post(
+            "/api/utilisateurs/me/changer-mot-de-passe",
+            data={
+                "ancien_mot_de_passe": mdp_temporaire,
+                "nouveau_mot_de_passe": "SuperNouveauMdp123!",
+                "confirmation_mot_de_passe": "SuperNouveauMdp123!",
+            },
+            content_type="application/json",
+            **agent_headers,
+        )
+        self.assertEqual(res_change_ok.status_code, 200)
+
+        # 6. Maintenant l'accès à /api/roles/ est débloqué
+        res_unblocked = self.client.get("/api/roles/", **agent_headers)
+        self.assertEqual(res_unblocked.status_code, 200)
+
+    def test_soft_delete_et_reactivation_utilisateur(self):
+        """Vérifie le soft delete (désactivation logique) et la réactivation."""
+        user = Utilisateur.objects.create_user(
+            courriel="a_supprimer@pants.tg",
+            password="pwd",
+            nom="Test",
+            prenom="SoftDelete",
+            doit_changer_mot_de_passe=False,
+        )
+
+        # Soft delete via DELETE /api/utilisateurs/{id}
+        res_del = self.client.delete(f"/api/utilisateurs/{user.id}", **self.admin_headers)
+        self.assertEqual(res_del.status_code, 200)
+
+        # L'utilisateur existe toujours en base, mais avec statut DESACTIVE
+        user.refresh_from_db()
+        self.assertEqual(user.statut, StatutUtilisateur.DESACTIVE)
+        self.assertFalse(user.is_active)
+
+        # Réactivation via POST /api/utilisateurs/{id}/reactiver
+        res_reactivate = self.client.post(f"/api/utilisateurs/{user.id}/reactiver", **self.admin_headers)
+        self.assertEqual(res_reactivate.status_code, 200)
+
+        user.refresh_from_db()
+        self.assertEqual(user.statut, StatutUtilisateur.ACTIF)
+        self.assertTrue(user.is_active)
+
+    def test_reinitialisation_mot_de_passe_par_admin(self):
+        """Vérifie la réinitialisation du mot de passe d'un utilisateur par l'admin."""
+        user = Utilisateur.objects.create_user(
+            courriel="oublie@pants.tg",
+            password="OldPassword123!",
+            nom="Oublie",
+            prenom="User",
+            doit_changer_mot_de_passe=False,
+        )
+
+        res = self.client.post(f"/api/utilisateurs/{user.id}/reinitialiser-mot-de-passe", **self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        nouveau_mdp = data["mot_de_passe_temporaire"]
+
+        # Le compte est remis en quarantaine
+        user.refresh_from_db()
+        self.assertTrue(user.doit_changer_mot_de_passe)
+        self.assertTrue(user.check_password(nouveau_mdp))
+
+    def test_permissions_read_only_endpoint(self):
+        """Vérifie que /api/permissions est accessible en lecture seule et rejette les modifications."""
+        # GET liste ➡️ 200
+        res_list = self.client.get("/api/permissions/", **self.admin_headers)
+        self.assertEqual(res_list.status_code, 200)
+        self.assertGreaterEqual(len(res_list.json()), 11)
+
+        # POST création ➡️ 405 Method Not Allowed (n'existe pas)
+        res_post = self.client.post(
+            "/api/permissions/",
+            data={"code": "HACK_PERM", "libelle": "Hack"},
+            content_type="application/json",
+            **self.admin_headers,
+        )
+        self.assertEqual(res_post.status_code, 405)
+
+    def test_protection_suppression_role_assigne(self):
+        """Un rôle assigné à des utilisateurs ne peut pas être supprimé (HTTP 409)."""
+        role_special = Role.objects.create(libelle="Rôle Affecté")
+        user = Utilisateur.objects.create_user(
+            courriel="affecte@pants.tg",
+            password="pwd",
+            nom="Membre",
+            prenom="Role",
+            role=role_special,
+        )
+
+        # Tentative de suppression ➡️ Rejetée avec HTTP 409
+        res_del = self.client.delete(f"/api/roles/{role_special.id}", **self.admin_headers)
+        self.assertEqual(res_del.status_code, 409)
+
+        # Désassignation de l'utilisateur
+        user.role = None
+        user.save()
+
+        # Nouvelle tentative ➡️ Succès 200
+        res_del_ok = self.client.delete(f"/api/roles/{role_special.id}", **self.admin_headers)
+        self.assertEqual(res_del_ok.status_code, 200)
+
+    def test_rbac_interdiction_si_permission_manquante(self):
+        """Un utilisateur sans la permission requise reçoit un HTTP 403 PERMISSION_DENIED."""
+        from accounts.security import creer_access_token
+
+        role_limite = Role.objects.create(libelle="Lecteur Seul")
+        role_limite.permissions.add(Permission.objects.get(code=CodePermission.PERMISSION_VOIR))
+
+        lecteur = Utilisateur.objects.create_user(
+            courriel="lecteur@pants.tg",
+            password="Password123!",
+            nom="Lecteur",
+            prenom="Simple",
+            role=role_limite,
+            doit_changer_mot_de_passe=False,
+        )
+        token_lecteur = creer_access_token(lecteur)
+        lecteur_headers = {"HTTP_AUTHORIZATION": f"Bearer {token_lecteur}"}
+
+        # Lecture des permissions ➡️ 200 OK
+        res_perm = self.client.get("/api/permissions/", **lecteur_headers)
+        self.assertEqual(res_perm.status_code, 200)
+
+        # Création de rôle (exige ROLE_CREER) ➡️ 403 Forbidden
+        res_create_role = self.client.post(
+            "/api/roles/",
+            data={"libelle": "Nouveau Rôle Interdit"},
+            content_type="application/json",
+            **lecteur_headers,
+        )
+        self.assertEqual(res_create_role.status_code, 403)
