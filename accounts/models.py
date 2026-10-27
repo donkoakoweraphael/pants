@@ -6,7 +6,9 @@ from core.models import MyBaseModel
 class UtilisateurManager(BaseUserManager):
     """Gestionnaire personnalisé pour créer des utilisateurs avec leur courriel comme identifiant."""
 
-    def create_user(self, courriel, password=None, **extra_fields):
+    def create_user(self, courriel=None, password=None, **extra_fields):
+        if not courriel:
+            courriel = extra_fields.pop("username", None) or extra_fields.pop("email", None)
         if not courriel:
             raise ValueError("Le champ courriel est obligatoire.")
         courriel = self.normalize_email(courriel)
@@ -19,7 +21,7 @@ class UtilisateurManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, courriel, password=None, **extra_fields):
+    def create_superuser(self, courriel=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("statut", StatutUtilisateur.ACTIF)
