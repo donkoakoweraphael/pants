@@ -17,20 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: pants_redis_cache
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   web:
     build:
       context: .
@@ -47,13 +33,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-django-insecure-docker-dev-secret-key}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,web}
       DATABASE_URL: postgres://${POSTGRES_USER:-pants_user}:${POSTGRES_PASSWORD:-pants_password}@db:5432/${POSTGRES_DB:-pants_db}
-      REDIS_URL: redis://redis:${REDIS_PORT:-6379}/1
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
 volumes:
   postgres_data:
-  redis_data:
