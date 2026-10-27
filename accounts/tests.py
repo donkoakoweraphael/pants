@@ -120,3 +120,18 @@ class AccountsModelsTestCase(TestCase):
         nouveau_role = Role.objects.create(libelle="Superviseur")
         self.assertEqual(nouveau_role.cree_par, admin_user)
         self.assertEqual(nouveau_role.modifie_par, admin_user)
+
+    def test_utilisateur_names_and_email_alias(self):
+        """Vérifie get_full_name, get_short_name et l'alias email (getter/setter)."""
+        user = Utilisateur(
+            courriel="alice.wonderland@example.com",
+            nom="Wonderland",
+            prenom="Alice",
+        )
+        self.assertEqual(user.get_full_name(), "Alice Wonderland")
+        self.assertEqual(user.get_short_name(), "Alice")
+        self.assertEqual(user.email, "alice.wonderland@example.com")
+
+        # Test setter de l'alias email
+        user.email = "alice.new@example.com"
+        self.assertEqual(user.courriel, "alice.new@example.com")

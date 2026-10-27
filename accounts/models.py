@@ -89,11 +89,10 @@ class Utilisateur(AbstractUser, MyBaseModel):
     Identifié uniquement par son courriel. Possède un rôle et des permissions directes.
     """
 
-    # Retrait du champ username au profit du courriel
+    # Retrait des champs username, first_name et last_name au profit du diagramme UML
     username = None
     first_name = None
     last_name = None
-    email = None
 
     # Champs définis dans le diagramme
     nom = models.CharField(max_length=150, verbose_name="Nom de famille")
@@ -149,6 +148,23 @@ class Utilisateur(AbstractUser, MyBaseModel):
 
     def __str__(self):
         return f"{self.prenom} {self.nom} <{self.courriel}>"
+
+    def get_full_name(self):
+        """Retourne le prénom et le nom complet de l'utilisateur."""
+        return f"{self.prenom} {self.nom}".strip()
+
+    def get_short_name(self):
+        """Retourne le prénom ou le courriel de l'utilisateur."""
+        return self.prenom or self.courriel
+
+    @property
+    def email(self):
+        """Alias vers courriel pour compatibilité avec l'écosystème Django."""
+        return self.courriel
+
+    @email.setter
+    def email(self, value):
+        self.courriel = value
 
     def save(self, *args, **kwargs):
         # Synchronise automatiquement le booléen Django is_active avec le statut métier

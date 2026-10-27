@@ -109,6 +109,17 @@ class MyBaseModelAuditTestCase(TestCase):
 
         self.assertEqual(item.modifie_par, self.user2)
 
+    def test_save_with_unsaved_user_in_context_does_not_fail(self):
+        """Un utilisateur non persisté (sans PK) dans le contexte ne doit pas provoquer de ValueError."""
+        User = get_user_model()
+        unsaved_user = User(courriel="unsaved@test.com")
+        set_current_user(unsaved_user)
+
+        # La sauvegarde ne doit pas lever ValueError
+        item = DummyAuditModel.objects.create(name="Unsaved user test")
+        self.assertIsNone(item.cree_par)
+        self.assertIsNone(item.modifie_par)
+
 
 class CurrentUserMiddlewareTestCase(TestCase):
     """Test du middleware de détection utilisateur."""

@@ -47,7 +47,7 @@ class MyBaseModel(models.Model):
         user = get_current_user()
         is_new = not self.pk
 
-        if user and getattr(user, "is_authenticated", False):
+        if user and getattr(user, "is_authenticated", False) and getattr(user, "pk", None) is not None:
             # Si c'est une création (pas de clé primaire et cree_par pas encore valorisé)
             if is_new and not self.cree_par_id:
                 self.cree_par = user
