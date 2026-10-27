@@ -8,6 +8,7 @@ class PermissionAdmin(admin.ModelAdmin):
         "code",
         "libelle",
         "cree_par",
+        "modifie_par",
         "date_creation",
         "date_modification",
     )
@@ -18,7 +19,14 @@ class PermissionAdmin(admin.ModelAdmin):
         ("Informations générales", {"fields": ("code", "libelle")}),
         (
             "Traçabilité (Audit)",
-            {"fields": ("cree_par", "modifie_par", "date_creation", "date_modification")},
+            {
+                "fields": (
+                    "cree_par",
+                    "modifie_par",
+                    "date_creation",
+                    "date_modification",
+                )
+            },
         ),
     )
 
@@ -29,6 +37,7 @@ class RoleAdmin(admin.ModelAdmin):
         "libelle",
         "get_permissions_count",
         "cree_par",
+        "modifie_par",
         "date_creation",
         "date_modification",
     )
@@ -40,7 +49,14 @@ class RoleAdmin(admin.ModelAdmin):
         ("Informations générales", {"fields": ("libelle", "permissions")}),
         (
             "Traçabilité (Audit)",
-            {"fields": ("cree_par", "modifie_par", "date_creation", "date_modification")},
+            {
+                "fields": (
+                    "cree_par",
+                    "modifie_par",
+                    "date_creation",
+                    "date_modification",
+                )
+            },
         ),
     )
 
@@ -60,19 +76,21 @@ class UtilisateurAdmin(admin.ModelAdmin):
         "is_staff",
         "is_active",
         "cree_par",
+        "modifie_par",
         "date_creation",
+        "date_modification",
     )
     list_filter = ("statut", "role", "is_staff", "is_active")
     search_fields = ("courriel", "nom", "prenom", "tel")
     filter_horizontal = ("permissions", "groups", "user_permissions")
     ordering = ("nom", "prenom")
     readonly_fields = (
-        "last_login",
-        "date_joined",
         "cree_par",
         "modifie_par",
         "date_creation",
         "date_modification",
+        "last_login",
+        "date_joined",
     )
     fieldsets = (
         (
@@ -96,13 +114,20 @@ class UtilisateurAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Traçabilité & Connexions (Audit)",
+            "Traçabilité (Audit)",
             {
                 "fields": (
                     "cree_par",
                     "modifie_par",
                     "date_creation",
                     "date_modification",
+                )
+            },
+        ),
+        (
+            "Connexions & Sessions",
+            {
+                "fields": (
                     "last_login",
                     "date_joined",
                 )
