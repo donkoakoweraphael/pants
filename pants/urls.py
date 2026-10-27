@@ -18,6 +18,12 @@ from django.contrib import admin
 from django.urls import path
 from ninja import NinjaAPI
 from core.exceptions import register_exception_handlers
+from accounts.api import (
+    router_auth,
+    router_permissions,
+    router_roles,
+    router_utilisateurs,
+)
 
 # Instance centrale de l'API Ninja avec métadonnées complètes pour Swagger
 api = NinjaAPI(
@@ -29,6 +35,12 @@ api = NinjaAPI(
 
 # Enregistrement des gestionnaires d'exceptions personnalisés
 register_exception_handlers(api)
+
+# Enregistrement des routeurs REST au premier niveau de l'API
+api.add_router("/auth", router_auth, tags=["Authentification"])
+api.add_router("/permissions", router_permissions, tags=["Permissions"])
+api.add_router("/roles", router_roles, tags=["Rôles"])
+api.add_router("/utilisateurs", router_utilisateurs, tags=["Utilisateurs"])
 
 
 @api.get("/add")
