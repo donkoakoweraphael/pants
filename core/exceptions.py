@@ -36,6 +36,18 @@ class ConflictException(BaseAPIException):
     code = "CONFLICT"
 
 
+class PasswordChangeRequiredException(BaseAPIException):
+    status_code = 403
+    code = "PASSWORD_CHANGE_REQUIRED"
+
+    def __init__(
+        self,
+        message: str = "Vous devez obligatoirement modifier votre mot de passe temporaire pour continuer.",
+        details=None,
+    ):
+        super().__init__(message=message, code="PASSWORD_CHANGE_REQUIRED", details=details)
+
+
 def register_exception_handlers(api: NinjaAPI) -> None:
     """
     Enregistre les gestionnaires d'exceptions personnalisés sur l'instance NinjaAPI
