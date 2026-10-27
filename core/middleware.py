@@ -29,7 +29,8 @@ class CurrentUserMiddleware(MiddlewareMixin):
                     import jwt
 
                     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-                    user_id = payload.get("user_id")
+                    # Supporte à la fois la clé 'user_id' et la norme RFC 'sub'
+                    user_id = payload.get("user_id") or payload.get("sub")
                     if user_id is not None:
                         User = get_user_model()
                         user = User.objects.filter(id=user_id, is_active=True).first()
