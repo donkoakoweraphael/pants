@@ -186,3 +186,21 @@ class AccountsModelsTestCase(TestCase):
         )
         self.assertEqual(user.get_full_name(), "Alice Wonderland")
         self.assertEqual(user.get_short_name(), "Alice")
+
+    def test_doit_changer_mot_de_passe_defaults(self):
+        """Vérifie que create_user initialise doit_changer_mot_de_passe à True et create_superuser à False."""
+        simple_user = Utilisateur.objects.create_user(
+            courriel="standard@example.com",
+            password="pwd",
+            nom="Standard",
+            prenom="User",
+        )
+        self.assertTrue(simple_user.doit_changer_mot_de_passe)
+
+        admin_user = Utilisateur.objects.create_superuser(
+            courriel="root_admin@example.com",
+            password="pwd",
+            nom="Admin",
+            prenom="Root",
+        )
+        self.assertFalse(admin_user.doit_changer_mot_de_passe)

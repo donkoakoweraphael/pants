@@ -41,6 +41,7 @@ class UtilisateurManager(BaseUserManager):
         extra_fields.setdefault("statut", StatutUtilisateur.ACTIF)
         extra_fields.setdefault("nom", "Admin")
         extra_fields.setdefault("prenom", "Super")
+        extra_fields.setdefault("doit_changer_mot_de_passe", False)
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("Le superutilisateur doit avoir is_staff=True.")
@@ -134,6 +135,11 @@ class Utilisateur(AbstractBaseUser, PermissionsMixin, MyBaseModel):
         default=True,
         verbose_name="Actif",
         help_text="Indique si le compte est actif. Synchronisé automatiquement avec le statut métier.",
+    )
+    doit_changer_mot_de_passe = models.BooleanField(
+        default=True,
+        verbose_name="Doit changer de mot de passe",
+        help_text="Impose le renouvellement obligatoire du mot de passe à la première connexion.",
     )
     date_joined = models.DateTimeField(
         default=timezone.now,

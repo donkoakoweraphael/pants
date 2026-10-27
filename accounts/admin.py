@@ -140,13 +140,14 @@ class UtilisateurAdmin(admin.ModelAdmin):
         "role",
         "is_staff",
         "is_active",
+        "doit_changer_mot_de_passe",
         "cree_par",
         "modifie_par",
         "date_creation",
         "date_modification",
     )
     list_display_links = ("id", "courriel")
-    list_filter = ("statut", "role", "is_staff", "is_active")
+    list_filter = ("statut", "role", "is_staff", "is_active", "doit_changer_mot_de_passe")
     search_fields = ("courriel", "nom", "prenom", "tel")
     filter_horizontal = ("permissions", "groups", "user_permissions")
     ordering = ("id",)
@@ -175,6 +176,7 @@ class UtilisateurAdmin(admin.ModelAdmin):
                     "is_staff",
                     "is_superuser",
                     "is_active",
+                    "doit_changer_mot_de_passe",
                     "groups",
                     "user_permissions",
                 )
