@@ -12,6 +12,7 @@ class DummyAuditModel(MyBaseModel):
 
     class Meta:
         app_label = "core"
+        managed = False
 
 
 class ContextVarTestCase(TestCase):
@@ -36,22 +37,30 @@ class MyBaseModelAuditTestCase(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS core_dummyauditmodel (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name VARCHAR(50) NOT NULL,
-                    date_creation DATETIME NOT NULL,
-                    date_modification DATETIME NOT NULL,
-                    cree_par_id INTEGER NULL REFERENCES auth_user(id),
-                    modifie_par_id INTEGER NULL REFERENCES auth_user(id)
-                );
-            """)
+        if connection.vendor == "sqlite":
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS core_dummyauditmodel (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR(50) NOT NULL,
+                        date_creation DATETIME NOT NULL,
+                        date_modification DATETIME NOT NULL,
+                        cree_par_id INTEGER NULL,
+                        modifie_par_id INTEGER NULL
+                    );
+                """)
+        else:
+            with connection.schema_editor() as editor:
+                editor.create_model(DummyAuditModel)
 
     @classmethod
     def tearDownClass(cls):
-        with connection.cursor() as cursor:
-            cursor.execute("DROP TABLE IF EXISTS core_dummyauditmodel;")
+        if connection.vendor == "sqlite":
+            with connection.cursor() as cursor:
+                cursor.execute("DROP TABLE IF EXISTS core_dummyauditmodel;")
+        else:
+            with connection.schema_editor() as editor:
+                editor.delete_model(DummyAuditModel)
         super().tearDownClass()
 
     def setUp(self):

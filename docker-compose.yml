@@ -1,18 +1,22 @@
+name: pant
+
 services:
   db:
     image: postgres:16-alpine
-    container_name: pants_postgres_db
+    container_name: pant_postgres_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-pants_db}
-      POSTGRES_USER: ${POSTGRES_USER:-pants_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pants_password}
+      POSTGRES_DB: ${POSTGRES_DB:-pant_db}
+      POSTGRES_USER: ${POSTGRES_USER:-pant_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pant_password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pant_postgres_data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - pant_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pants_user} -d ${POSTGRES_DB:-pants_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pant_user} -d ${POSTGRES_DB:-pant_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,21 +25,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pants_django_web
+    image: pant_django_web:latest
+    container_name: pant_django_web
     restart: unless-stopped
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
     ports:
       - "8000:8000"
+    networks:
+      - pant_network
     environment:
       DEBUG: ${DEBUG:-True}
       SECRET_KEY: ${SECRET_KEY:-django-insecure-docker-dev-secret-key}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,web}
-      DATABASE_URL: postgres://${POSTGRES_USER:-pants_user}:${POSTGRES_PASSWORD:-pants_password}@db:5432/${POSTGRES_DB:-pants_db}
+      DATABASE_URL: postgres://${POSTGRES_USER:-pant_user}:${POSTGRES_PASSWORD:-pant_password}@db:5432/${POSTGRES_DB:-pant_db}
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
-  postgres_data:
+  pant_postgres_data:
+    name: pant_postgres_data
+
+networks:
+  pant_network:
+    name: pant_network
