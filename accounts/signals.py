@@ -14,6 +14,16 @@ def synchroniser_permissions(sender, **kwargs):
     à chaque migration de l'application accounts.
     """
     if sender.name == "accounts":
+        # Migration rétro-compatible de l'ancien code UTILISATEUR_SUPPRIMER vers UTILISATEUR_DESACTIVER si présent
+        if Permission.objects.filter(code="UTILISATEUR_SUPPRIMER").exists():
+            if Permission.objects.filter(code=CodePermission.UTILISATEUR_DESACTIVER).exists():
+                Permission.objects.filter(code="UTILISATEUR_SUPPRIMER").delete()
+            else:
+                Permission.objects.filter(code="UTILISATEUR_SUPPRIMER").update(
+                    code=CodePermission.UTILISATEUR_DESACTIVER,
+                    libelle=CodePermission.UTILISATEUR_DESACTIVER.label,
+                )
+
         crees = 0
         mis_a_jour = 0
         for code, libelle in CodePermission.choices:

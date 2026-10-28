@@ -13,7 +13,8 @@ class AccountsModelsTestCase(TestCase):
         # Récupération des permissions pré-alimentées par le signal post_migrate
         self.perm_user_view = Permission.objects.get(code=CodePermission.UTILISATEUR_VOIR)
         self.perm_user_create = Permission.objects.get(code=CodePermission.UTILISATEUR_CREER)
-        self.perm_user_supprimer = Permission.objects.get(code=CodePermission.UTILISATEUR_SUPPRIMER)
+        self.perm_user_desactiver = Permission.objects.get(code=CodePermission.UTILISATEUR_DESACTIVER)
+        self.perm_user_suspendre = Permission.objects.get(code=CodePermission.UTILISATEUR_SUSPENDRE)
 
         # Création d'un rôle de test
         self.role_admin, _ = Role.objects.get_or_create(libelle="Administrateur")
@@ -139,13 +140,13 @@ class AccountsModelsTestCase(TestCase):
         )
 
         # Attribution d'une permission directe exceptionnelle
-        user.permissions.add(self.perm_user_supprimer)
+        user.permissions.add(self.perm_user_desactiver)
 
         droits_effectifs = user.get_all_permissions_codes()
 
         self.assertSetEqual(
             droits_effectifs,
-            {"UTILISATEUR_VOIR", "UTILISATEUR_CREER", "UTILISATEUR_SUPPRIMER"},
+            {"UTILISATEUR_VOIR", "UTILISATEUR_CREER", "UTILISATEUR_DESACTIVER"},
         )
 
     def test_superuser_has_all_permissions(self):
@@ -346,29 +347,47 @@ class AccountsAPITestCase(TestCase):
         res_unblocked = self.client.get("/api/roles/", **agent_headers)
         self.assertEqual(res_unblocked.status_code, 200)
 
-    def test_soft_delete_et_reactivation_utilisateur(self):
-        """Vérifie le soft delete (désactivation logique) et la réactivation."""
+    def test_desactivation_suspension_et_reactivation_utilisateur(self):
+        """Vérifie la désactivation, la suspension et la réactivation d'un utilisateur."""
         user = Utilisateur.objects.create_user(
-            courriel="a_supprimer@pants.tg",
+            courriel="cycle_vie@pants.tg",
             password="pwd",
             nom="Test",
-            prenom="SoftDelete",
+            prenom="CycleVie",
             doit_changer_mot_de_passe=False,
         )
 
-        # Soft delete via DELETE /api/utilisateurs/{id}
+        # 1. Désactivation logique via DELETE /api/utilisateurs/{id}
         res_del = self.client.delete(f"/api/utilisateurs/{user.id}", **self.admin_headers)
         self.assertEqual(res_del.status_code, 200)
-
-        # L'utilisateur existe toujours en base, mais avec statut DESACTIVE
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.DESACTIVE)
         self.assertFalse(user.is_active)
 
-        # Réactivation via POST /api/utilisateurs/{id}/reactiver
+        # 2. Réactivation via POST /api/utilisateurs/{id}/reactiver
         res_reactivate = self.client.post(f"/api/utilisateurs/{user.id}/reactiver", **self.admin_headers)
         self.assertEqual(res_reactivate.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.statut, StatutUtilisateur.ACTIF)
+        self.assertTrue(user.is_active)
 
+        # 3. Désactivation explicite via POST /api/utilisateurs/{id}/desactiver
+        res_desact = self.client.post(f"/api/utilisateurs/{user.id}/desactiver", **self.admin_headers)
+        self.assertEqual(res_desact.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.statut, StatutUtilisateur.DESACTIVE)
+        self.assertFalse(user.is_active)
+
+        # 4. Suspension via POST /api/utilisateurs/{id}/suspendre
+        res_susp = self.client.post(f"/api/utilisateurs/{user.id}/suspendre", **self.admin_headers)
+        self.assertEqual(res_susp.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.statut, StatutUtilisateur.SUSPENDU)
+        self.assertFalse(user.is_active)
+
+        # 5. Réactivation d'un utilisateur suspendu via POST /api/utilisateurs/{id}/reactiver
+        res_reactivate2 = self.client.post(f"/api/utilisateurs/{user.id}/reactiver", **self.admin_headers)
+        self.assertEqual(res_reactivate2.status_code, 200)
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.ACTIF)
         self.assertTrue(user.is_active)
@@ -398,7 +417,7 @@ class AccountsAPITestCase(TestCase):
         # GET liste ➡️ 200
         res_list = self.client.get("/api/permissions/", **self.admin_headers)
         self.assertEqual(res_list.status_code, 200)
-        self.assertGreaterEqual(len(res_list.json()), 11)
+        self.assertGreaterEqual(len(res_list.json()), 12)
 
         # POST création ➡️ 405 Method Not Allowed (n'existe pas)
         res_post = self.client.post(

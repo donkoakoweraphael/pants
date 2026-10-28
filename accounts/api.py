@@ -491,11 +491,11 @@ def patch_utilisateur(request, utilisateur_id: int, payload: UtilisateurPatchIn)
     return formater_utilisateur_detail(user)
 
 
-@router_utilisateurs.delete("/{int:utilisateur_id}", response=SuccessResponse, summary="Supprimer un utilisateur (Soft delete)")
-@require_permission(CodePermission.UTILISATEUR_SUPPRIMER)
+@router_utilisateurs.delete("/{int:utilisateur_id}", response=SuccessResponse, summary="Désactiver un utilisateur (Soft delete)")
+@require_permission(CodePermission.UTILISATEUR_DESACTIVER)
 def supprimer_utilisateur(request, utilisateur_id: int):
     """
-    Suppression logique (Soft delete) d'un utilisateur.
+    Désactivation logique (Soft delete) d'un utilisateur.
     Le compte n'est pas effacé de la base : il passe au statut DESACTIVE et is_active=False.
     """
     user = Utilisateur.objects.filter(id=utilisateur_id).first()
@@ -506,6 +506,27 @@ def supprimer_utilisateur(request, utilisateur_id: int):
     user.save(update_fields=["statut"])
 
     return SuccessResponse(message=f"L'utilisateur '{user.courriel}' a été désactivé avec succès (suppression logique).")
+
+
+@router_utilisateurs.post("/{int:utilisateur_id}/desactiver", response=SuccessResponse, summary="Désactiver un utilisateur")
+@require_permission(CodePermission.UTILISATEUR_DESACTIVER)
+def desactiver_utilisateur(request, utilisateur_id: int):
+    """Désactive un compte utilisateur en basculant son statut à DESACTIVE."""
+    return supprimer_utilisateur(request, utilisateur_id)
+
+
+@router_utilisateurs.post("/{int:utilisateur_id}/suspendre", response=SuccessResponse, summary="Suspendre un utilisateur")
+@require_permission(CodePermission.UTILISATEUR_SUSPENDRE)
+def suspendre_utilisateur(request, utilisateur_id: int):
+    """Suspend temporairement un compte utilisateur en basculant son statut à SUSPENDU."""
+    user = Utilisateur.objects.filter(id=utilisateur_id).first()
+    if not user:
+        raise NotFoundException(f"Utilisateur #{utilisateur_id} introuvable.")
+
+    user.statut = StatutUtilisateur.SUSPENDU
+    user.save(update_fields=["statut"])
+
+    return SuccessResponse(message=f"Le compte '{user.courriel}' a été suspendu avec succès.")
 
 
 @router_utilisateurs.post("/{int:utilisateur_id}/reactiver", response=SuccessResponse, summary="Réactiver un utilisateur")

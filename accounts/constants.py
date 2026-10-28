@@ -15,8 +15,12 @@ class CodePermission(models.TextChoices):
     UTILISATEUR_VOIR = "UTILISATEUR_VOIR", "Consulter la liste et le profil des utilisateurs"
     UTILISATEUR_CREER = "UTILISATEUR_CREER", "Créer un nouvel utilisateur"
     UTILISATEUR_MODIFIER = "UTILISATEUR_MODIFIER", "Modifier les informations d'un utilisateur"
-    UTILISATEUR_SUPPRIMER = "UTILISATEUR_SUPPRIMER", "Désactiver un compte utilisateur (Soft delete)"
-    UTILISATEUR_REACTIVER = "UTILISATEUR_REACTIVER", "Réactiver un compte utilisateur désactivé"
+    UTILISATEUR_DESACTIVER = "UTILISATEUR_DESACTIVER", "Désactiver un compte utilisateur"
+    UTILISATEUR_SUSPENDRE = "UTILISATEUR_SUSPENDRE", "Suspendre un compte utilisateur"
+    UTILISATEUR_REACTIVER = (
+        "UTILISATEUR_REACTIVER",
+        "Réactiver un compte utilisateur désactivé ou suspendu",
+    )
     UTILISATEUR_REINITIALISER_MDP = (
         "UTILISATEUR_REINITIALISER_MDP",
         "Réinitialiser le mot de passe d'un utilisateur",
