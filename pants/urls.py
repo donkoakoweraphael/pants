@@ -15,8 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
 from ninja import NinjaAPI
+from ninja.openapi.docs import Redoc
 from core.exceptions import register_exception_handlers
 from accounts.api import (
     router_auth,
@@ -32,6 +33,14 @@ api = NinjaAPI(
     description="API de collecte terrain et gestion des sites / établissements",
     docs_url="/docs",
 )
+
+# Instance du visualiseur de documentation alternative Redoc
+redoc_viewer = Redoc()
+
+
+def redoc_view(request):
+    """Affiche la documentation interactive alternative Redoc."""
+    return redoc_viewer.render_page(request, api)
 
 # Enregistrement des gestionnaires d'exceptions personnalisés
 register_exception_handlers(api)
@@ -56,5 +65,6 @@ def health_check(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    re_path(r"^api/redoc/?$", redoc_view, name="redoc"),
     path("api/", api.urls),
 ]
