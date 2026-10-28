@@ -1,22 +1,46 @@
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Generic, TypeVar
 from ninja import Schema
 from pydantic import Field
 
-
-class ErrorResponse(Schema):
-    """Schéma standardisé de réponse d'erreur pour l'API."""
-
-    message: str = Field(..., description="Message explicatif de l'erreur lisible par l'utilisateur", example="Ressource introuvable.")
-    code: str = Field("ERROR", description="Code technique de l'erreur", example="NOT_FOUND")
-    details: Optional[Any] = Field(None, description="Détails contextuels ou erreurs de champs")
+T = TypeVar("T")
 
 
-class SuccessResponse(Schema):
-    """Schéma générique pour confirmer une action effectuée avec succès."""
+class ApiResponse(Schema, Generic[T]):
+    """
+    Enveloppe standardisée pour toutes les réponses de succès de l'API REST.
+    Permet au frontend de disposer d'une structure uniforme et prévisible.
+    """
 
-    success: bool = Field(True, description="Indicateur de succès")
-    message: str = Field("Opération effectuée avec succès.", description="Message de confirmation")
+    success: bool = Field(True, description="Indicateur de succès de l'opération")
+    message: str = Field(
+        "Opération effectuée avec succès.",
+        description="Message descriptif ou de confirmation lisible par l'utilisateur",
+    )
+    data: Optional[T] = Field(None, description="Données utiles retournées par l'endpoint")
+
+
+class ApiErrorResponse(Schema):
+    """
+    Enveloppe standardisée pour toutes les réponses d'erreur de l'API REST.
+    Permet au frontend d'exploiter un format d'erreur uniforme.
+    """
+
+    success: bool = Field(False, description="Indicateur d'échec de l'opération")
+    message: str = Field(
+        ...,
+        description="Message d'erreur explicatif lisible par l'utilisateur",
+        example="Ressource introuvable.",
+    )
+    code: str = Field("ERROR", description="Code technique d'erreur", example="NOT_FOUND")
+    details: Optional[Any] = Field(
+        None, description="Détails contextuels ou erreurs de validation de champs"
+    )
+
+
+# Alias rétro-compatibles
+SuccessResponse = ApiResponse[None]
+ErrorResponse = ApiErrorResponse
 
 
 class AuditOut(Schema):

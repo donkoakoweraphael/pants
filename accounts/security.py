@@ -7,6 +7,7 @@ from typing import Optional, Any
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils.translation import gettext_lazy as _
 from ninja.security import HttpBearer
 from core.context import set_current_user
 from core.exceptions import (
@@ -79,9 +80,9 @@ def decoder_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
-        raise UnauthorizedException("Le jeton d'accès a expiré. Veuillez vous reconnecter.")
+        raise UnauthorizedException(_("Le jeton d'accès a expiré. Veuillez vous reconnecter."))
     except jwt.InvalidTokenError as exc:
-        raise UnauthorizedException(f"Jeton d'accès invalide : {str(exc)}")
+        raise UnauthorizedException(_("Jeton d'accès invalide : {detail}").format(detail=str(exc)))
 
 
 class JWTAuth(HttpBearer):
@@ -98,13 +99,13 @@ class JWTAuth(HttpBearer):
         user_id = payload.get("user_id") or payload.get("sub")
 
         if not user_id:
-            raise UnauthorizedException("Jeton d'accès incomplet ou corrompu.")
+            raise UnauthorizedException(_("Jeton d'accès incomplet ou corrompu."))
 
         User = get_user_model()
         user = User.objects.filter(id=user_id).first()
 
         if not user or not user.is_active:
-            raise UnauthorizedException("Utilisateur introuvable ou compte inactif.")
+            raise UnauthorizedException(_("Utilisateur introuvable ou compte inactif."))
 
         # Injection dans la requête et le contexte d'audit
         request.user = user
@@ -117,7 +118,7 @@ class JWTAuth(HttpBearer):
 
             if chemin_normalise not in chemins_autorises:
                 raise PasswordChangeRequiredException(
-                    "Vous devez obligatoirement modifier votre mot de passe temporaire avant d'accéder aux fonctionnalités de l'API."
+                    _("Vous devez obligatoirement modifier votre mot de passe temporaire avant d'accéder aux fonctionnalités de l'API.")
                 )
 
         return user
@@ -138,10 +139,10 @@ def require_permission(code_permission: str):
             user = getattr(request, "user", None)
 
             if not user or not getattr(user, "is_authenticated", False):
-                raise UnauthorizedException("Authentification requise pour effectuer cette action.")
+                raise UnauthorizedException(_("Authentification requise pour effectuer cette action."))
 
             if not user.is_active:
-                raise PermissionDeniedException("Votre compte est désactivé.")
+                raise PermissionDeniedException(_("Votre compte est désactivé."))
 
             # Un superutilisateur bénéficie de tous les privilèges
             if user.is_superuser:
@@ -151,7 +152,7 @@ def require_permission(code_permission: str):
             droits = user.get_all_permissions_codes()
             if code_permission not in droits:
                 raise PermissionDeniedException(
-                    f"Privilège insuffisant. Permission requise : '{code_permission}'."
+                    f"{_('Privilège insuffisant. Permission requise :')} '{code_permission}'."
                 )
 
             return view_func(request, *args, **kwargs)

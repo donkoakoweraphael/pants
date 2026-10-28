@@ -258,6 +258,8 @@ class AccountsAPITestCase(TestCase):
             content_type="application/json",
         )
         self.assertEqual(res_fail.status_code, 401)
+        self.assertFalse(res_fail.json()["success"])
+        self.assertEqual(res_fail.json()["code"], "UNAUTHORIZED")
 
         # 2. Succès avec bons identifiants
         res_ok = self.client.post(
@@ -266,7 +268,9 @@ class AccountsAPITestCase(TestCase):
             content_type="application/json",
         )
         self.assertEqual(res_ok.status_code, 200)
-        data = res_ok.json()
+        body = res_ok.json()
+        self.assertTrue(body["success"])
+        data = body["data"]
         self.assertIn("access_token", data)
         self.assertFalse(data["doit_changer_mot_de_passe"])
         self.assertEqual(data["courriel"], "admin@pants.tg")
@@ -294,7 +298,8 @@ class AccountsAPITestCase(TestCase):
             **self.admin_headers,
         )
         self.assertEqual(res_create.status_code, 201)
-        data_user = res_create.json()
+        self.assertTrue(res_create.json()["success"])
+        data_user = res_create.json()["data"]
         mdp_temporaire = data_user["mot_de_passe_temporaire"]
         self.assertTrue(data_user["doit_changer_mot_de_passe"])
 
@@ -305,18 +310,21 @@ class AccountsAPITestCase(TestCase):
             content_type="application/json",
         )
         self.assertEqual(res_login.status_code, 200)
-        token_agent = res_login.json()["access_token"]
+        self.assertTrue(res_login.json()["success"])
+        token_agent = res_login.json()["data"]["access_token"]
         agent_headers = {"HTTP_AUTHORIZATION": f"Bearer {token_agent}"}
 
         # 3. Tentative d'accès à l'API normale ➡️ Bloqué par la Barrière 1 (Quarantaine)
         res_blocked = self.client.get("/api/roles/", **agent_headers)
         self.assertEqual(res_blocked.status_code, 403)
+        self.assertFalse(res_blocked.json()["success"])
         self.assertEqual(res_blocked.json()["code"], "PASSWORD_CHANGE_REQUIRED")
 
         # 4. Accès à /api/utilisateurs/me ➡️ Autorisé en quarantaine
         res_me = self.client.get("/api/utilisateurs/me", **agent_headers)
         self.assertEqual(res_me.status_code, 200)
-        self.assertTrue(res_me.json()["doit_changer_mot_de_passe"])
+        self.assertTrue(res_me.json()["success"])
+        self.assertTrue(res_me.json()["data"]["doit_changer_mot_de_passe"])
 
         # 5. Changement de mot de passe obligatoire
         res_change_fail = self.client.post(
@@ -330,6 +338,7 @@ class AccountsAPITestCase(TestCase):
             **agent_headers,
         )
         self.assertEqual(res_change_fail.status_code, 400)
+        self.assertFalse(res_change_fail.json()["success"])
 
         res_change_ok = self.client.post(
             "/api/utilisateurs/me/changer-mot-de-passe",
@@ -342,10 +351,12 @@ class AccountsAPITestCase(TestCase):
             **agent_headers,
         )
         self.assertEqual(res_change_ok.status_code, 200)
+        self.assertTrue(res_change_ok.json()["success"])
 
         # 6. Maintenant l'accès à /api/roles/ est débloqué
         res_unblocked = self.client.get("/api/roles/", **agent_headers)
         self.assertEqual(res_unblocked.status_code, 200)
+        self.assertTrue(res_unblocked.json()["success"])
 
     def test_desactivation_suspension_et_reactivation_utilisateur(self):
         """Vérifie la désactivation, la suspension et la réactivation d'un utilisateur."""
@@ -357,30 +368,30 @@ class AccountsAPITestCase(TestCase):
             doit_changer_mot_de_passe=False,
         )
 
-        # 1. Désactivation logique via DELETE /api/utilisateurs/{id}
+        # 1. Vérification que DELETE /api/utilisateurs/{id} est supprimé (405 Method Not Allowed)
         res_del = self.client.delete(f"/api/utilisateurs/{user.id}", **self.admin_headers)
-        self.assertEqual(res_del.status_code, 200)
+        self.assertEqual(res_del.status_code, 405)
+
+        # 2. Désactivation explicite via POST /api/utilisateurs/{id}/desactiver
+        res_desact = self.client.post(f"/api/utilisateurs/{user.id}/desactiver", **self.admin_headers)
+        self.assertEqual(res_desact.status_code, 200)
+        self.assertTrue(res_desact.json()["success"])
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.DESACTIVE)
         self.assertFalse(user.is_active)
 
-        # 2. Réactivation via POST /api/utilisateurs/{id}/reactiver
+        # 3. Réactivation via POST /api/utilisateurs/{id}/reactiver
         res_reactivate = self.client.post(f"/api/utilisateurs/{user.id}/reactiver", **self.admin_headers)
         self.assertEqual(res_reactivate.status_code, 200)
+        self.assertTrue(res_reactivate.json()["success"])
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.ACTIF)
         self.assertTrue(user.is_active)
 
-        # 3. Désactivation explicite via POST /api/utilisateurs/{id}/desactiver
-        res_desact = self.client.post(f"/api/utilisateurs/{user.id}/desactiver", **self.admin_headers)
-        self.assertEqual(res_desact.status_code, 200)
-        user.refresh_from_db()
-        self.assertEqual(user.statut, StatutUtilisateur.DESACTIVE)
-        self.assertFalse(user.is_active)
-
         # 4. Suspension via POST /api/utilisateurs/{id}/suspendre
         res_susp = self.client.post(f"/api/utilisateurs/{user.id}/suspendre", **self.admin_headers)
         self.assertEqual(res_susp.status_code, 200)
+        self.assertTrue(res_susp.json()["success"])
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.SUSPENDU)
         self.assertFalse(user.is_active)
@@ -388,6 +399,7 @@ class AccountsAPITestCase(TestCase):
         # 5. Réactivation d'un utilisateur suspendu via POST /api/utilisateurs/{id}/reactiver
         res_reactivate2 = self.client.post(f"/api/utilisateurs/{user.id}/reactiver", **self.admin_headers)
         self.assertEqual(res_reactivate2.status_code, 200)
+        self.assertTrue(res_reactivate2.json()["success"])
         user.refresh_from_db()
         self.assertEqual(user.statut, StatutUtilisateur.ACTIF)
         self.assertTrue(user.is_active)
@@ -404,7 +416,8 @@ class AccountsAPITestCase(TestCase):
 
         res = self.client.post(f"/api/utilisateurs/{user.id}/reinitialiser-mot-de-passe", **self.admin_headers)
         self.assertEqual(res.status_code, 200)
-        data = res.json()
+        self.assertTrue(res.json()["success"])
+        data = res.json()["data"]
         nouveau_mdp = data["mot_de_passe_temporaire"]
 
         # Le compte est remis en quarantaine
@@ -417,7 +430,8 @@ class AccountsAPITestCase(TestCase):
         # GET liste ➡️ 200
         res_list = self.client.get("/api/permissions/", **self.admin_headers)
         self.assertEqual(res_list.status_code, 200)
-        self.assertGreaterEqual(len(res_list.json()), 12)
+        self.assertTrue(res_list.json()["success"])
+        self.assertGreaterEqual(len(res_list.json()["data"]), 12)
 
         # POST création ➡️ 405 Method Not Allowed (n'existe pas)
         res_post = self.client.post(
@@ -442,6 +456,8 @@ class AccountsAPITestCase(TestCase):
         # Tentative de suppression ➡️ Rejetée avec HTTP 409
         res_del = self.client.delete(f"/api/roles/{role_special.id}", **self.admin_headers)
         self.assertEqual(res_del.status_code, 409)
+        self.assertFalse(res_del.json()["success"])
+        self.assertEqual(res_del.json()["code"], "CONFLICT")
 
         # Désassignation de l'utilisateur
         user.role = None
@@ -450,6 +466,7 @@ class AccountsAPITestCase(TestCase):
         # Nouvelle tentative ➡️ Succès 200
         res_del_ok = self.client.delete(f"/api/roles/{role_special.id}", **self.admin_headers)
         self.assertEqual(res_del_ok.status_code, 200)
+        self.assertTrue(res_del_ok.json()["success"])
 
     def test_rbac_interdiction_si_permission_manquante(self):
         """Un utilisateur sans la permission requise reçoit un HTTP 403 PERMISSION_DENIED."""
@@ -472,6 +489,7 @@ class AccountsAPITestCase(TestCase):
         # Lecture des permissions ➡️ 200 OK
         res_perm = self.client.get("/api/permissions/", **lecteur_headers)
         self.assertEqual(res_perm.status_code, 200)
+        self.assertTrue(res_perm.json()["success"])
 
         # Création de rôle (exige ROLE_CREER) ➡️ 403 Forbidden
         res_create_role = self.client.post(
@@ -481,3 +499,5 @@ class AccountsAPITestCase(TestCase):
             **lecteur_headers,
         )
         self.assertEqual(res_create_role.status_code, 403)
+        self.assertFalse(res_create_role.json()["success"])
+        self.assertEqual(res_create_role.json()["code"], "FORBIDDEN")
